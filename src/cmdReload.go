@@ -5,16 +5,32 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
 	"github.com/gomodule/redigo/redis"
 )
 
-func reload(w http.ResponseWriter, r *http.Request) {
+func cmdReload() bool {
+	// Load File
+	file, err := os.Open("blocklist.urls")
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	// foreach URL in File
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lockAndLoad(scanner.Text())
+	}
+	return true
+}
+
+func lockAndLoad(fileUrl string) bool {
 	// Download File
-	fileUrl := "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset"
-	err := DownloadFile("ip.list", fileUrl)
+	err := DownloadFile("tmp.list", fileUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,26 +42,26 @@ func reload(w http.ResponseWriter, r *http.Request) {
 	redis.Int(conn.Do("EXISTS", "1"))
 
 	// Read File
-	file, err := os.Open("ip.list")
+	file, err := os.Open("tmp.list")
 	if err != nil {
 		log.Fatal(err)
-		return
+		return false
 	}
 	defer file.Close()
 
 	err = conn.Send("MULTI")
 	if err != nil {
 		log.Fatal(err)
-		return
+		return false
 	}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		if checkIPAddress(scanner.Text()) {
+		if net.ParseIP(scanner.Text()) != nil {
 			err = conn.Send("SET", scanner.Text(), 1)
 			if err != nil {
 				log.Fatal(err)
-				return
+				return false
 			}
 		}
 	}
@@ -53,16 +69,15 @@ func reload(w http.ResponseWriter, r *http.Request) {
 	_, err = conn.Do("EXEC")
 	if err != nil {
 		log.Fatal(err)
-		return
+		return false
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
-		return
+		return false
 	}
 
-	fmt.Fprintf(w, "OK")
-	return
+	return true
 }
 
 func DownloadFile(filepath string, url string) error {
