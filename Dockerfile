@@ -1,12 +1,16 @@
-FROM golang:1.16-alpine
-WORKDIR /app
+FROM golang:1.16-alpine as build
+WORKDIR /build
+COPY src/* .
+RUN go build -o go-away
 
-COPY go.mod .
-COPY go.sum .
-COPY *.go ./
+FROM alpine:3.7 as app
 
-RUN go build -o /docker-go-away
+RUN apk add --update supervisor redis 
+COPY redis.conf /etc/redis.conf
+COPY supervisor.conf /etc/supervisor.conf
+COPY --from=build /build/go-away /app/go-away
 
 EXPOSE 8080
+CMD ["supervisord", "-c", "/etc/supervisor.conf"]
 
-CMD [ "/docker-go-away" ]
+HEALTHCHECK CMD redis-cli ping
