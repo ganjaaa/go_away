@@ -16,7 +16,7 @@ services:
       - traefik.http.services.my-app.loadbalancer.server.port=80
       # Middleware for this app
       - traefik.http.routers.my-app.middlewares=my-app-blocklist
-      - traefik.http.middlewares.my-app-blocklist.forwardauth.address=http://goaway:8080
+      - traefik.http.middlewares.my-app-blocklist.forwardauth.address=http://goaway:8080/auth
     networks:
       - traefik
 
